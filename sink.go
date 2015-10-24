@@ -50,3 +50,50 @@ func (fh FanoutSink) AddSample(key []string, val float32) {
 		s.AddSample(key, val)
 	}
 }
+
+// FilterFunc is a function interface used to determine if the given metrics
+// key or value should cause the metrics layer to filter the message.
+type FilterFunc func(key []string, val float32) bool
+
+// FilterSink is an implementation of MetricSink which allows pre-filtering
+// of submitted metrics. If the filters pass, then the underlink MetricSink
+// is handed the values normally.
+type FilterSink struct {
+	Sink    MetricSink
+	Filters []FilterFunc
+}
+
+func (s *FilterSink) SetGauge(key []string, val float32) {
+	if !s.filter(key, val) {
+		s.Sink.SetGauge(key, val)
+	}
+}
+
+func (s *FilterSink) EmitKey(key []string, val float32) {
+	if !s.filter(key, val) {
+		s.Sink.EmitKey(key, val)
+	}
+}
+
+func (s *FilterSink) IncrCounter(key []string, val float32) {
+	if !s.filter(key, val) {
+		s.Sink.IncrCounter(key, val)
+	}
+}
+
+func (s *FilterSink) AddSample(key []string, val float32) {
+	if !s.filter(key, val) {
+		s.Sink.AddSample(key, val)
+	}
+}
+
+// filter is used to iterate our filters and check if they would filter
+// the given metrics value.
+func (s *FilterSink) filter(key []string, val float32) bool {
+	for _, fn := range s.Filters {
+		if fn(key, val) {
+			return true
+		}
+	}
+	return false
+}

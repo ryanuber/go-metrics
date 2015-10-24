@@ -118,3 +118,40 @@ func TestFanoutSink_Sample(t *testing.T) {
 		t.Fatalf("val not equal")
 	}
 }
+
+func TestFilterSink(t *testing.T) {
+	// Create the filters
+	filt := []FilterFunc{
+		func(key []string, val float32) bool { return key[0] == "baz" },
+		func(key []string, val float32) bool { return val < 1.0 },
+	}
+	fs := &FilterSink{Filters: filt}
+
+	funcs := []func(key []string, val float32){
+		fs.SetGauge,
+		fs.EmitKey,
+		fs.IncrCounter,
+		fs.AddSample,
+	}
+
+	for _, fn := range funcs {
+		m1 := &MockSink{}
+		fs.Sink = m1
+
+		// Trigger some metrics
+		fn([]string{"foo"}, 2.9) // Passes
+		fn([]string{"bar"}, 1.3) // Passes
+		fn([]string{"baz"}, 9.6) // Filters key
+		fn([]string{"zip"}, 0.6) // Filters val
+
+		expectKeys := [][]string{[]string{"foo"}, []string{"bar"}}
+		if !reflect.DeepEqual(m1.keys, expectKeys) {
+			t.Fatalf("bad keys: expect %v, got: %v", expectKeys, m1.keys)
+		}
+
+		expectVals := []float32{2.9, 1.3}
+		if !reflect.DeepEqual(m1.vals, expectVals) {
+			t.Fatalf("bad vals: expect %v, got: %v", expectVals, m1.vals)
+		}
+	}
+}
